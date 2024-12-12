@@ -6,7 +6,6 @@ from absl import logging
 from brax import base
 from brax import envs
 from brax.io import model
-from brax.training import acting
 from brax.training.acting import Evaluator
 from brax.training import gradients
 from brax.training import pmap
@@ -24,11 +23,13 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from prefacc.training import acting
+from prefacc.training import types as prefacc_types
 from prefacc.training.agents.prefppo import reward_model as reward_model_networks
 
 
 Metrics = brax_types.Metrics
-Transition = brax_types.Transition
+Transition = prefacc_types.Transition
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
 
 ReplayBufferState = Any
@@ -237,6 +238,7 @@ def train(
       observation=dummy_obs,
       action=dummy_action,
       reward=0.0,
+      true_reward=0.0,
       discount=0.0,
       next_observation=dummy_obs,
       extras={'state_extras': {'truncation': 0.0}, 'policy_extras': {}},
@@ -331,6 +333,7 @@ def train(
   def get_experience(
       normalizer_params: running_statistics.RunningStatisticsState,
       policy_params: Params,
+      reward_model_params: Params,
       env_state: Union[envs.State, envs_v1.State],
       buffer_state: ReplayBufferState,
       key: PRNGKey,
@@ -340,8 +343,9 @@ def train(
       ReplayBufferState,
   ]:
     policy = make_policy((normalizer_params, policy_params))
+    reward_model = make_reward_model(reward_model_params)
     env_state, transitions = acting.actor_step(
-        env, env_state, policy, key, extra_fields=('truncation',)
+        env, env_state, policy, reward_model, key, extra_fields=('truncation',)
     )
 
     normalizer_params = running_statistics.update(
@@ -368,6 +372,7 @@ def train(
     normalizer_params, env_state, buffer_state = get_experience(
         training_state.normalizer_params,
         training_state.policy_params,
+        training_state.reward_model_params,
         env_state,
         buffer_state,
         experience_key,
@@ -407,6 +412,7 @@ def train(
       new_normalizer_params, env_state, buffer_state = get_experience(
           training_state.normalizer_params,
           training_state.policy_params,
+          training_state.reward_model_params,
           env_state,
           buffer_state,
           key,
