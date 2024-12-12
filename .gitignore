@@ -9,7 +9,7 @@ __pycache__
 .vscode/
 .idea/
 *.egg-info
-myenv
+env
 
 ####### UNITY STUFF
 
